@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AzkarPro — Digital Dhikr Counter (Single-file PWA)</title>
+  <meta name="description" content="AzkarPro prototype: large tappable counter, azkar library, progress tracking, offline support." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%230D7377'/%3E%3Ctext x='50' y='57' font-size='40' text-anchor='middle' fill='%23fff' font-family='Arial'%3E%A%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root{--bg:#FAFAFA;--card:#fff;--muted:#6b7280;--primary:#0D7377;--accent:#FFD700}
+    [data-theme='dark']{--bg:#0b1220;--card:#0f1724;--muted:#9ca3af}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,'Noto Naskh Arabic',sans-serif;background:var(--bg);color:#111}
+    .app{max-width:900px;margin:20px auto;padding:16px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,var(--primary),#107d7d);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+    h1{font-size:18px;margin:0}
+    .controls{display:flex;gap:8px;align-items:center}
+    .btn{background:var(--primary);color:white;border:none;padding:8px 12px;border-radius:10px;cursor:pointer}
+    .ghost{background:transparent;border:1px solid rgba(0,0,0,0.08);}
+
+    .grid{display:grid;grid-template-columns:1fr 340px;gap:16px;margin-top:16px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr} .sidebar{order:2}}
+
+    .card{background:var(--card);border-radius:14px;padding:16px;box-shadow:0 6px 18px rgba(16,24,40,0.06)}
+
+    /* Counter */
+    .counter-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px}
+    .counter-circle{width:70vw;max-width:460px;height:70vw;max-height:460px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative; touch-action:manipulation}
+    .counter-inner{width:88%;height:88%;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-direction:column;background:radial-gradient(circle at 30% 20%, rgba(255,255,255,0.2), transparent 20%),linear-gradient(180deg,var(--primary),#107d7d);color:#fff;font-weight:700}
+    .count{font-size:64px;letter-spacing:2px}
+    .target{font-size:14px;opacity:.95}
+    .progress-ring{position:absolute;inset:6px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+
+    .small-controls{display:flex;gap:8px;align-items:center;margin-top:8px}
+
+    /* Sidebar */
+    .sidebar .search{display:flex;gap:8px;margin-bottom:12px}
+    input[type=search]{flex:1;padding:8px;border-radius:10px;border:1px solid #e5e7eb}
+    .azkar-list{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto}
+    .azkar-item{display:flex;gap:8px;align-items:flex-start;padding:10px;border-radius:8px;border:1px solid #f0f0f0}
+    .azkar-item .meta{flex:1}
+    .arabic{font-family:'Noto Naskh Arabic',serif;font-size:18px}
+    .translation{font-size:13px;color:var(--muted)}
+
+    footer{margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+    .muted{color:var(--muted);font-size:13px}
+    .chip{padding:6px 8px;border-radius:999px;border:1px solid #e6e6e6;font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header>
+      <div class="brand">
+        <div class="logo">A</div>
+        <div>
+          <h1>AzkarPro — Digital Dhikr Counter</h1>
+          <div class="muted">Large tappable counter • Offline-ready PWA</div>
+        </div>
+      </div>
+      <div class="controls">
+        <select id="langSelect" aria-label="Language">
+          <option value="en">English</option>
+          <option value="ar">العربية</option>
+          <option value="ur">اردو</option>
+        </select>
+        <button class="btn" id="themeToggle">Dark</button>
+        <button class="btn ghost" id="exportBtn">Export</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="card">
+        <div class="counter-wrap">
+          <div class="counter-circle" id="tapArea" role="button" aria-label="Tap to count">
+            <div class="progress-ring" id="progressRing"></div>
+            <div class="counter-inner">
+              <div class="arabic" id="currentDhikrArabic">سُبْحَانَ ٱللَّٰهِ</div>
+              <div class="count" id="count">0</div>
+              <div class="target" id="targetLabel">Target: 33</div>
+            </div>
+          </div>
+
+          <div class="small-controls">
+            <button class="btn" id="resetBtn">Reset</button>
+            <label class="chip">Mode
+              <select id="modeSelect">
+                <option value="33">33</option>
+                <option value="99">99</option>
+                <option value="100">100</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <input id="customTarget" type="number" min="1" placeholder="Custom" style="width:96px;padding:6px;border-radius:8px;border:1px solid #e6e6e6;display:none" />
+            <button class="btn ghost" id="soundBtn">🔔</button>
+            <button class="btn ghost" id="vibeBtn">📳</button>
+          </div>
+
+          <div style="width:100%;display:flex;justify-content:space-between;margin-top:8px">
+            <div class="muted">Session: <span id="sessionCount">0</span></div>
+            <div class="muted">Lifetime: <span id="lifetimeCount">0</span></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidebar card">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-weight:700">Azkar Library</div>
+          <div class="muted">Tap a card → Start</div>
+        </div>
+        <div class="search" style="margin-top:12px">
+          <input type="search" id="search" placeholder="Search azkar or translation" />
+          <button class="btn ghost" id="favFilter">★</button>
+        </div>
+        <div class="azkar-list" id="azkarList"></div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="addSample">+ Add Sample</button>
+          <button class="btn ghost" id="clearData">Clear Data</button>
+        </div>
+
+        <hr style="margin:12px 0;border:none;border-top:1px solid #f0f0f0" />
+        <div class="muted">Tips: Use the big circle to count. Long-press to subtract. App works offline.</div>
+      </aside>
+    </main>
+
+    <footer class="app card">
+      <div class="muted">Made with ❤️ — AzkarPro prototype</div>
+      <div>
+        <button class="btn" id="installBtn" style="display:none">Install</button>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // --- App state & sample data ---
+    const DEFAULTS = {
+      theme: localStorage.getItem('az_theme') || (window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'),
+      lang: localStorage.getItem('az_lang') || 'en',
+      vibration: JSON.parse(localStorage.getItem('az_vibe') || 'true'),
+      sound: JSON.parse(localStorage.getItem('az_sound') || 'false')
+    }
+
+    const azkarDefault = [
+      {id:1,arabic:'سُبْحَانَ ٱللَّٰهِ',translation:{en:'SubhanAllah — Glory be to Allah',ur:'سبحان اللہ'},count:33,category:'general'},
+      {id:2,arabic:'الْحَمْدُ لِلَّٰهِ',translation:{en:'Alhamdulillah — All praise is due to Allah',ur:'الحمد للہ'},count:33,category:'general'},
+      {id:3,arabic:'ٱللَّٰهُ أَكْبَرُ',translation:{en:'Allahu Akbar — Allah is the Greatest',ur:'اللہ اکبر'},count:34,category:'general'}
+    ];
+
+    // elements
+    const app = document.getElementById('app');
+    const countEl = document.getElementById('count');
+    const tapArea = document.getElementById('tapArea');
+    const targetLabel = document.getElementById('targetLabel');
+    const currentArabic = document.getElementById('currentDhikrArabic');
+    const sessionCountEl = document.getElementById('sessionCount');
+    const lifetimeCountEl = document.getElementById('lifetimeCount');
+    const azkarList = document.getElementById('azkarList');
+
+    let state = {
+      current: azkarDefault[0],
+      count: 0,
+      target: 33,
+      lifetime: parseInt(localStorage.getItem('az_life')||'0',10),
+      azkar: JSON.parse(localStorage.getItem('az_library')||JSON.stringify(azkarDefault)),
+      mode: '33',
+      vibration: DEFAULTS.vibration,
+      sound: DEFAULTS.sound
+    }
+
+    // --- UI bindings ---
+    function renderLibrary(filter=''){
+      azkarList.innerHTML = '';
+      const data = state.azkar.filter(a => (a.arabic+JSON.stringify(a.translation)).toLowerCase().includes(filter.toLowerCase()));
+      data.forEach(a => {
+        const div = document.createElement('div'); div.className='azkar-item';
+        div.innerHTML = `<div style="width:44px;height:44px;border-radius:8px;background:#f3f4f6;display:flex;align-items:center;justify-content:center">${a.count}</div>
+          <div class="meta"><div class="arabic">${a.arabic}</div><div class="translation">${a.translation.en}</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><button class="btn" data-id="${a.id}">Start</button><button class="btn ghost" data-fav="${a.id}">♡</button></div>`;
+        azkarList.appendChild(div);
+      })
+    }
+
+    function save() {
+      localStorage.setItem('az_library', JSON.stringify(state.azkar));
+      localStorage.setItem('az_life', state.lifetime);
+    }
+
+    function setCurrent(azkar) {
+      state.current = azkar; state.count=0; state.target = azkar.count; updateUI();
+    }
+
+    function updateUI(){
+      countEl.textContent = state.count;
+      currentArabic.textContent = state.current.arabic;
+      targetLabel.textContent = 'Target: '+state.target;
+      sessionCountEl.textContent = state.count;
+      lifetimeCountEl.textContent = state.lifetime;
+      // progress ring
+      const pct = Math.min(1, state.count/state.target);
+      const size = Math.max(88, Math.round(300 * pct));
+      const pr = document.getElementById('progressRing');
+      pr.style.boxShadow = `0 0 0 ${Math.round(6 + pct*30)}px rgba(13,115,119,${0.12 + pct*0.28})`;
+    }
+
+    // --- Counter interactions ---
+    let lastTap = 0;
+    tapArea.addEventListener('click',()=>{
+      increment();
+    });
+    tapArea.addEventListener('contextmenu',e=>{e.preventDefault(); decrement();});
+    // long-press to decrement on touch
+    let touchTimer;
+    tapArea.addEventListener('touchstart',()=>{ touchTimer = setTimeout(()=>decrement(),600)});
+    tapArea.addEventListener('touchend',()=>{ clearTimeout(touchTimer) });
+
+    function increment(){
+      state.count++;
+      state.lifetime++;
+      if(state.vibration && navigator.vibrate) navigator.vibrate(10);
+      if(state.sound) playClick();
+      if(state.count>=state.target) celebrate();
+      updateUI(); save();
+    }
+    function decrement(){ if(state.count>0){state.count--; state.lifetime--; updateUI(); save();} }
+
+    function celebrate(){
+      // small animation
+      const inner = document.querySelector('.counter-inner');
+      inner.animate([{transform:'scale(1)'},{transform:'scale(1.08)'},{transform:'scale(1)'}],{duration:420});
+      // small sound
+      if(state.sound) playDing();
+    }
+
+    // --- sound ---
+    const ctx = typeof AudioContext !== 'undefined' ? new AudioContext() : null;
+    function playClick(){ if(!ctx) return; const o=ctx.createOscillator(); const g=ctx.createGain(); o.type='sine'; o.frequency.value=660; g.gain.value=0.02; o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.03); }
+    function playDing(){ if(!ctx) return; const o=ctx.createOscillator(); const g=ctx.createGain(); o.type='triangle'; o.frequency.value=880; g.gain.value=0.04; o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.18); }
+
+    // --- controls ---
+    document.getElementById('resetBtn').addEventListener('click',()=>{ state.count=0; updateUI(); save(); });
+    document.getElementById('modeSelect').addEventListener('change',e=>{
+      const v=e.target.value; if(v==='custom'){document.getElementById('customTarget').style.display='inline-block';} else {document.getElementById('customTarget').style.display='none'; state.mode=v; state.target=parseInt(v,10); updateUI();}
+    });
+    document.getElementById('customTarget').addEventListener('change',e=>{ const v=parseInt(e.target.value||'0',10); if(v>0) state.target=v; updateUI();});
+
+    document.getElementById('vibeBtn').addEventListener('click',()=>{ state.vibration=!state.vibration; localStorage.setItem('az_vibe',JSON.stringify(state.vibration)); alert('Vibration '+(state.vibration?'enabled':'disabled')) });
+    document.getElementById('soundBtn').addEventListener('click',()=>{ state.sound=!state.sound; localStorage.setItem('az_sound',JSON.stringify(state.sound)); alert('Sound '+(state.sound?'enabled':'disabled')) });
+
+    document.getElementById('search').addEventListener('input',e=>renderLibrary(e.target.value));
+
+    document.getElementById('addSample').addEventListener('click',()=>{ const id=Date.now(); state.azkar.push({id,arabic:'آیۃ الکرسٰی',translation:{en:'Ayat ul Kursi'},count:1}); save(); renderLibrary(); });
+    document.getElementById('clearData').addEventListener('click',()=>{ if(confirm('Clear local data?')){ localStorage.clear(); location.reload(); }});
+
+    azkarList.addEventListener('click',e=>{
+      const start = e.target.closest('button[data-id]');
+      if(start){ const id = parseInt(start.dataset.id,10); const a = state.azkar.find(x=>x.id===id); if(a) setCurrent(a); }
+    });
+
+    // export CSV
+    document.getElementById('exportBtn').addEventListener('click',()=>{
+      const rows = [['id','arabic','translation_en','count']].concat(state.azkar.map(a=>[a.id, '"'+a.arabic+'"', '"'+(a.translation?.en||'')+'"', a.count]));
+      const csv = rows.map(r=>r.join(',')).join('\n');
+      const blob = new Blob([csv],{type:'text/csv'});
+      const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='azkar_library.csv'; a.click();
+    });
+
+    // theme and language
+    const themeToggle = document.getElementById('themeToggle');
+    function applyTheme(t){ if(t==='dark'){document.documentElement.setAttribute('data-theme','dark'); themeToggle.textContent='Light'; } else {document.documentElement.removeAttribute('data-theme'); themeToggle.textContent='Dark'; } localStorage.setItem('az_theme',t); }
+    applyTheme(DEFAULTS.theme);
+    themeToggle.addEventListener('click',()=>{ const t = document.documentElement.hasAttribute('data-theme') ? 'light' : 'dark'; applyTheme(t); });
+
+    const langSelect = document.getElementById('langSelect'); langSelect.value = DEFAULTS.lang; langSelect.addEventListener('change',e=>{ localStorage.setItem('az_lang', e.target.value); alert('Language set to '+e.target.value); });
+
+    // install prompt handling
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; document.getElementById('installBtn').style.display='inline-block'; });
+    document.getElementById('installBtn').addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); const choice = await deferredPrompt.userChoice; deferredPrompt = null; document.getElementById('installBtn').style.display='none'; });
+
+    // register a simple service worker from a blob so single-file works offline
+    if('serviceWorker' in navigator){
+      const swCode = `self.addEventListener('install', (e)=>{self.skipWaiting();});
+      self.addEventListener('activate', e=>{e.waitUntil(self.clients.claim());});
+      self.addEventListener('fetch', e=>{
+        // simple cache-first for same-origin GET requests
+        if(e.request.method !== 'GET') return;
+        e.respondWith(caches.open('azkar-cache-v1').then(async cache=>{ const cached = await cache.match(e.request); if(cached) return cached; try{ const res = await fetch(e.request); cache.put(e.request,res.clone()); return res;}catch(err){ return cached || new Response(''); }}));
+      });`;
+      const blob = new Blob([swCode],{type:'application/javascript'});
+      navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+    }
+
+    // create manifest dynamically so file can be saved as single html
+    const manifest = {name:'AzkarPro (single-file)',short_name:'AzkarPro',start_url:'.',display:'standalone',background_color:'#FAFAFA',icons:[{src:document.querySelector('link[rel=icon]').href,sizes:'48x48',type:'image/svg+xml'}]};
+    const manifestBlob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
+    const manifestURL = URL.createObjectURL(manifestBlob);
+    const link = document.createElement('link'); link.rel='manifest'; link.href = manifestURL; document.head.appendChild(link);
+
+    // init
+    renderLibrary(); updateUI();
+
+    // load library display listeners (delegation)
+    azkarList.addEventListener('click', (e)=>{
+      const btn = e.target.closest('button'); if(!btn) return;
+      if(btn.dataset.id){ const id = parseInt(btn.dataset.id,10); const a = state.azkar.find(x=>x.id===id); if(a) setCurrent(a); }
+    });
+
+    // handshake with AudioContext on iOS: user gesture
+    window.addEventListener('touchstart', ()=>{ if(ctx && ctx.state === 'suspended') ctx.resume(); }, {once:true});
+
+    // expose debug
+    window._AZ = {state, save, setCurrent};
+  </script>
+</body>
+</html>
